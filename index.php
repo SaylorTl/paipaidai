@@ -5,7 +5,7 @@ include 'openapi_client.php';
 // $code = "52c974893a46478bbf8a0d993a169c8c";
 // $authorizeResult = authorize($code);
 // var_dump($authorizeResult) ;
-$accessToken = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+$accessToken = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 
 /*保存用户授权信息后可获取做权限内的接口调用*/
 // $url = "http://gw.open.ppdai.com/open/openApiPublicQueryService/QueryUserNameByOpenID";
