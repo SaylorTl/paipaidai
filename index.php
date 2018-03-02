@@ -1,4 +1,17 @@
 <?php
+set_time_limit(0);//让程序一直执行下去
+$interval=3;//每隔一定时间运行
+do{
+    $msg=date("Y-m-d H:i:s");
+    alog("12321");
+    sleep($interval);//等待时间，进行下一次操作。
+}while(true);
+
+function alog($str){
+    $now = date("Y-m-d H:i:s");
+    echo "($now):".$str."\n";
+}
+exit;
 include 'openapi_client.php';
 
 /*step 1 通过code获取授权信息*/
@@ -41,7 +54,7 @@ function getLoanList(){
     }';
     $result = send($url, $request);
     if($result['Result'] !== 1){
-        echo $result['ResultMessage'];
+        log($result['ResultMessage']);
     }
     $aviLoan = array();
     foreach($result['LoanInfos'] as $key=>$value){
@@ -61,39 +74,39 @@ function getLoanInfo($aviLoan){
     $request = '{"ListingIds": ['.$aviLoanStr.']}';
     $result = send($url, $request);
     if($result['Result']!==1){
-        echo $result['ResultMessage'];
+        log($result['ResultMessage']);
     }
     $bidList= array();
     foreach($result['LoanInfos'] as $k=>$vl){
          $time_off = time()-strtotime($vl['LastSuccessBorrowTime']);
         if($vl['WasteCount'] >=2 || $time_off<604800){
-            echo $vl['ListingId']."刚借完又借的资金状况忒差了~淘汰！";
+            log($vl['ListingId']."刚借完又借的资金状况忒差了~淘汰");
             continue;
         }
         if(($vl['NormalCount']/$vl['SuccessCount']<0.6&&$vl['SuccessCount']>4)|| $vl['OverdueLessCount']/$vl['NormalCount']>0.2 ||
             (($vl['Amount']+$vl['OwingAmount'])/ $vl['HighestDebt'] && $vl['NormalCount'] >4)>0.9||($vl['Amount']/$vl['HighestPrincipal']&& $vl['NormalCount'] >4)>0.9
         ){
-            echo $vl['ListingId']."预防借一次大的逃跑的情况~淘汰！";
+            log($vl['ListingId']."预防借一次大的逃跑的情况~淘汰！");
             continue;
         }
 
         if($vl['CertificateValidate']!=1 ||  !in_array($vl['StudyStyle'],array('普通','研究生'))
             || !in_array($vl['EducationDegree'],array('专科','本科','硕士','博士'))){
-            echo $vl['ListingId']."学渣标~淘汰！";
+            log($vl['ListingId']."学渣标~淘汰！");
             continue;
         }
 
         if($vl['OverdueLessCount']>=5 ||$vl['OverdueMoreCount']>=1 ||!in_array($vl['CreditCode'],array('AA','A','B'))){
-            echo $vl['ListingId']."信用不良标~淘汰！";
+            log($vl['ListingId']."信用不良标~淘汰！");
             continue;
         }
         if($vl['WasteCount'] >2)
         if($vl['OwingAmount']>=4000 ||$vl['Amount'] >= 12000){
-            echo $vl['ListingId']."剩余待还金额太多，属于老油条！~淘汰";
+            log($vl['ListingId']."剩余待还金额太多，属于老油条！~淘汰");
             continue;
         }
         if($vl['Age']<=22||$vl['Age']<=40){
-            echo $vl['ListingId']."年龄不符合还款要求！~淘汰";
+            log($vl['ListingId']."年龄不符合还款要求！~淘汰");
             continue;
         }
 
@@ -149,10 +162,10 @@ function doBid(){
             $request = '{"ListingId": '.$bvl.',"Amount": '.$amount.',"UseCoupon":"true"}';
             $result = send($url, $request,$accessToken);
             if($result['Result']== -1){
-                echo $result['ListingId'].$result['ResultMessage'];
+                log($result['ListingId'].$result['ResultMessage']);
                 continue;
             }
-            echo $result['ListingId']." ".$bk."级标的投资成功";
+            log($result['ListingId']." ".$bk."级标的投资成功");
         }
     }
 
