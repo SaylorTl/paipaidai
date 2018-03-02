@@ -50,7 +50,7 @@ function getLoanList(){
         }
         $aviLoan[]=$value['ListingId'];
     }
-    $this->getLoanInfo($aviLoan);
+    return getLoanInfo($aviLoan);
 }
 
 /*获取投标详情*/
@@ -65,49 +65,64 @@ function getLoanInfo($aviLoan){
     }
     $bidList= array();
     foreach($result['LoanInfos'] as $k=>$vl){
-        if($vl['CertificateValidate']!=1 ||$vl['EducateValidate']!=1 || $vl['PhoneValidate']!=1 || $vl['EducationDegree']!=1 || $vl['StudyStyle'] !='普通'){
-            echo $vl['ListingId']."学渣标的优先淘汰！";
+         $time_off = time()-strtotime($vl['LastSuccessBorrowTime']);
+        if($vl['WasteCount'] >=2 || $time_off<604800){
+            echo $vl['ListingId']."刚借完又借的资金状况忒差了~淘汰！";
+            continue;
+        }
+        if(($vl['NormalCount']/$vl['SuccessCount']<0.6&&$vl['SuccessCount']>4)|| $vl['OverdueLessCount']/$vl['NormalCount']>0.2 ||
+            (($vl['Amount']+$vl['OwingAmount'])/ $vl['HighestDebt'] && $vl['NormalCount'] >4)>0.9||($vl['Amount']/$vl['HighestPrincipal']&& $vl['NormalCount'] >4)>0.9
+        ){
+            echo $vl['ListingId']."预防借一次大的逃跑的情况~淘汰！";
             continue;
         }
 
-        if($vl['OverdueLessCount']>=5 ||$vl['OverdueMoreCount']>=1 ||!($vl['CreditCode']=='AA'|| $vl['CreditCode']=='A'||$vl['CreditCode']=='B')){
-            echo $vl['ListingId']."信用不良标的淘汰！";
+        if($vl['CertificateValidate']!=1 ||  !in_array($vl['StudyStyle'],array('普通','研究生'))
+            || !in_array($vl['EducationDegree'],array('专科','本科','硕士','博士'))){
+            echo $vl['ListingId']."学渣标~淘汰！";
             continue;
         }
-        if($vl['OwingAmount']>=4000 ||$vl['Amount'] >= 1200){
-            echo $vl['ListingId']."剩余待还金额太多，属于老油条！";
+
+        if($vl['OverdueLessCount']>=5 ||$vl['OverdueMoreCount']>=1 ||!in_array($vl['CreditCode'],array('AA','A','B'))){
+            echo $vl['ListingId']."信用不良标~淘汰！";
+            continue;
+        }
+        if($vl['WasteCount'] >2)
+        if($vl['OwingAmount']>=4000 ||$vl['Amount'] >= 12000){
+            echo $vl['ListingId']."剩余待还金额太多，属于老油条！~淘汰";
             continue;
         }
         if($vl['Age']<=22||$vl['Age']<=40){
-            echo $vl['ListingId']."年龄不符合还款要求！";
+            echo $vl['ListingId']."年龄不符合还款要求！~淘汰";
             continue;
         }
 
-        if($vl['EducationDegree'] == '研究生' || $vl['博士以上 '] == '研究生'){
+        if(in_array($vl['EducationDegree'],array('硕士','博士'))){
             $bidList['a'][]=$vl['ListingId'];
             continue;
         }
-        if($vl['CreditValidate'] == 1 ||$vl['CreditValidate'] == 1 ||$vl['CreditValidate'] == 1){
+        if($vl['CreditValidate'] == 1){
             $bidList['b'][]=$vl['ListingId'];
             continue;
         }
-        if(($vl['Age']==26 ||$vl['Age']==27||$vl['Age']==28) && $vl['Gender'] == 1 ){
-            $bidList['e'][]=$vl['ListingId'];
-            continue;
-        }
-        if( $vl['Gender'] == 2 ){
+        if($vl['EducationDegree']=='本科'){
             $bidList['c'][]=$vl['ListingId'];
             continue;
         }
-        if( $vl['Gender'] == 1 ){
+        if( $vl['Gender'] == 2 ){
             $bidList['d'][]=$vl['ListingId'];
             continue;
         }
+        if( $vl['Gender'] == 1 ){
+            $bidList['e'][]=$vl['ListingId'];
+            continue;
+        }
     }
-    doBid($bidList);
+    return $bidList;
 }
 
-function doBid($bidList){
+function doBid(){
+    $bidList = getLoanList();
     /*投标接口*/
     $url = "https://openapi.ppdai.com/invest/BidService/Bidding";
     $accessToken="yourAccessToken";
@@ -131,7 +146,7 @@ function doBid($bidList){
                 break;
         }
         foreach($bv as $bkl=>$bvl){
-            $request = '{"ListingId": '.$bvl.',"Amount": 150,"UseCoupon":"true"}';
+            $request = '{"ListingId": '.$bvl.',"Amount": '.$amount.',"UseCoupon":"true"}';
             $result = send($url, $request,$accessToken);
             if($result['Result']== -1){
                 echo $result['ListingId'].$result['ResultMessage'];
