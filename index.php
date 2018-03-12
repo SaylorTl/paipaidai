@@ -1,18 +1,18 @@
 <?php
-set_time_limit(0);//让程序一直执行下去
-$interval=3;//每隔一定时间运行
-do{
-    $msg=date("Y-m-d H:i:s");
-    sleep($interval);//等待时间，进行下一次操作。
-}while(true);
+//set_time_limit(0);//让程序一直执行下去
+//$interval=3;//每隔一定时间运行
+//do{
+//    $msg=date("Y-m-d H:i:s");
+//    sleep($interval);//等待时间，进行下一次操作。
+//}while(true);
 
-$config = include 'openapi_client.php';
+
 
 /*step 1 通过code获取授权信息*/
-// $code = "52c974893a46478bbf8a0d993a169c8c";
+// $code = "b4b069972aa145638a294504b9fd5bf3";
 // $authorizeResult = authorize($code);
 // var_dump($authorizeResult) ;
-$accessToken = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+
 
 /*保存用户授权信息后可获取做权限内的接口调用*/
 // $url = "http://gw.open.ppdai.com/open/openApiPublicQueryService/QueryUserNameByOpenID";
@@ -20,16 +20,16 @@ $accessToken = "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
 // $url = "http://gw.open.ppdai.com/auth/LoginService/AutoLogin";
 // $url = "http://gw.open.ppdai.com/invest/LLoanInfoService/LoanList";
 // $url = "http://gw.open.ppdai.com/invest/LLoanInfoService/BatchListingInfos";
-$url = "http://gw.open.ppdai.com/balance/balanceService/QueryBalance";
+//$url = "http://gw.open.ppdai.com/balance/balanceService/QueryBalance";
 
 // $request = '{"OpenID": "be47e5e4b9444047b0f8fe9311a8ea29"}';
 // $request = '{"Mobile": "15026671512","DeviceFP": "123456"}';
-$request = '{"Timestamp": "2017-03-14 19:15:22"}';
+//$request = '{"Timestamp": "2017-03-14 19:15:22"}';
 // $request = '{"PageIndex": 1,"StartDateTime": "2015-11-11 12:00:00.000"}';
 // $request = '{"ListingIds": [100001,123456]}';
-$request = '{}';
+//$request = '{}';
 
-$result = send($url, $request,$accessToken);
+//$result = send($url, $request,$accessToken);
 
 /*加解密*/
 // $data = "test";
@@ -38,19 +38,29 @@ $result = send($url, $request,$accessToken);
 // echo "Encrypted: ".$encrypted."<br>";
 // echo "Decrypted: ".$decrypted;
 include 'ppd_polcy.php';
-function log($str,$bid){
+include 'openapi_client.php';
+
+function pp_log($str,$bid){
     $now = date("Y-m-d H:i:s");
     echo "($now):标号".$bid.$str."\n";
 }
 
 
+getLoanList();
 /*新版投标列表接口（默认每页2000条）*/
 function getLoanList(){
-    $url = "https://openapi.ppdai.com/invest/LLoanInfoService/LoanList";
+    global  $accessToken;
+    $url = "https://openapi.ppdai.com/invest/BidService/BidList";
     $request = '{
-       "PageIndex": 1,
-    }';
-    $result = send($url, $request);
+  "ListingId": 0,
+  "StartTime": "2018-01-01",
+  "EndTime": "2018-03-12",
+  "PageIndex": 1,
+  "PageSize": 20
+}';
+    $result = send($url, $request,$accessToken);
+    print_r($result);
+print_r(21312);exit;
     if($result['Result'] !== 1){
         log($result['ResultMessage']);
     }
@@ -61,6 +71,7 @@ function getLoanList(){
         }
         $aviLoan[]=$value['ListingId'];
     }
+    print_r(getLoanInfo($aviLoan));exit;
     return getLoanInfo($aviLoan);
 }
 
@@ -74,65 +85,7 @@ function getLoanInfo($aviLoan){
     if($result['Result']!==1){
         log($result['ResultMessage']);
     }
-    $bidList= array();
-    foreach($result['LoanInfos'] as $k=>$vl){
-        $time_off = time()-strtotime($vl['LastSuccessBorrowTime']);
-        if($vl['CurrentRate'] <10){
-            log("利率太低淘汰",$vl['ListingId']);
-            continue;
-        }
-        if($vl['WasteCount'] >=2 || $time_off<604800){
-            log("刚借完又借的资金状况忒差了~淘汰",$vl['ListingId']);
-            continue;
-        }
-        if(($vl['NormalCount']/$vl['SuccessCount']<0.6&&$vl['SuccessCount']>4)|| $vl['OverdueLessCount']/$vl['NormalCount']>0.2 ||
-            (($vl['Amount']+$vl['OwingAmount'])/ $vl['HighestDebt'] && $vl['NormalCount'] >4)>0.9||($vl['Amount']/$vl['HighestPrincipal']&& $vl['NormalCount'] >4)>0.9
-        ){
-            log("预防借一次大的逃跑的情况~淘汰！",$vl['ListingId']);
-            continue;
-        }
-
-        if($vl['CertificateValidate']!=1 ||  !in_array($vl['StudyStyle'],array('普通','普通全日制','研究生','成人'))
-            || !in_array($vl['EducationDegree'],array('专科','本科','研究生','硕士','博士','专科(高职)'))){
-            log("学渣标~淘汰！",$vl['ListingId']);
-            continue;
-        }
-
-        if($vl['OverdueLessCount']>=5 ||$vl['OverdueMoreCount']>=1 ||!in_array($vl['CreditCode'],array('AA','A','B'))){
-            log("信用不良标~淘汰！",$vl['ListingId']);
-            continue;
-        }
-        if($vl['OwingAmount']>=4000 ||$vl['Amount'] >= 12000){
-            log("剩余待还金额太多，属于老油条！~淘汰",$vl['ListingId']);
-            continue;
-        }
-        if($vl['Age']<=22||$vl['Age']<=40){
-            log("年龄不符合还款要求！~淘汰",$vl['ListingId']);
-            continue;
-        }
-
-        if(in_array($vl['EducationDegree'],array('研究生','硕士','博士')) || $vl['CreditCode']=='AA'){
-            $bidList['a'][]=$vl['ListingId'];
-            continue;
-        }
-        if($vl['CreditValidate'] == 1){
-            $bidList['b'][]=$vl['ListingId'];
-            continue;
-        }
-        if($vl['EducationDegree']=='本科' && in_array($vl['StudyStyle'],array('普通','普通全日制'))){
-            $bidList['c'][]=$vl['ListingId'];
-            continue;
-        }
-        if( $vl['Gender'] == 2 ){
-            $bidList['d'][]=$vl['ListingId'];
-            continue;
-        }
-        if( $vl['Gender'] == 1 ){
-            $bidList['e'][]=$vl['ListingId'];
-            continue;
-        }
-    }
-    return $bidList;
+    return $result['Result'];
 }
 
 function doBid(){

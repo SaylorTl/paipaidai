@@ -33,6 +33,7 @@ function sortToSign($request){
  */
 function sign($signdata){
     global $appPrivateKey;
+//    print_r($appPrivateKey);exit;
     if(openssl_sign($signdata,$sign,$appPrivateKey))
         $sign = base64_encode($sign);
     return $sign;

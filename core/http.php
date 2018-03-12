@@ -36,7 +36,6 @@ function SendRequest ( $url, $request, $appId, $accessToken ){
     
     $timestamp = gmdate ( "Y-m-d H:i:s", time ()); // UTC format
     $timestap_sign = sign($appId. $timestamp);
-
     $requestSignStr = sortToSign($request);
     $request_sign = sign($requestSignStr);
     
@@ -54,8 +53,7 @@ function SendRequest ( $url, $request, $appId, $accessToken ){
         curl_setopt ( $curl, CURLOPT_RETURNTRANSFER, 1 );
         $result = curl_exec ( $curl );
         curl_close ( $curl );
-//         $j = json_decode ( $result, true );
-        var_dump($result);
+    var_dump($result);exit;
         return $result;
 }
 
