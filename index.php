@@ -1,114 +1,122 @@
 <?php
-//set_time_limit(0);//让程序一直执行下去
-//$interval=3;//每隔一定时间运行
-//do{
-//    $msg=date("Y-m-d H:i:s");
-//    sleep($interval);//等待时间，进行下一次操作。
-//}while(true);
-
-
-
-/*step 1 通过code获取授权信息*/
-// $code = "b4b069972aa145638a294504b9fd5bf3";
+/*step 1 ͨ��code��ȡ��Ȩ��Ϣ*/
+// $code = "bee8569c187a4df580d5847cc742c562";
 // $authorizeResult = authorize($code);
-// var_dump($authorizeResult) ;
+// var_dump($authorizeResult) ;exit;
 
 
-/*保存用户授权信息后可获取做权限内的接口调用*/
+/*�����û���Ȩ��Ϣ��ɻ�ȡ��Ȩ���ڵĽӿڵ���*/
 // $url = "http://gw.open.ppdai.com/open/openApiPublicQueryService/QueryUserNameByOpenID";
 // $url = "http://gw.open.ppdai.com/auth/authservice/sendsmsauthcode";
-// $url = "http://gw.open.ppdai.com/auth/LoginService/AutoLogin";
-// $url = "http://gw.open.ppdai.com/invest/LLoanInfoService/LoanList";
+// $url = "http://gw.open.ppdai.com/auth/pp_loginService/Autopp_login";
+//$url = "http://gw.open.ppdai.com/invest/LLoanInfoService/LoanList";
 // $url = "http://gw.open.ppdai.com/invest/LLoanInfoService/BatchListingInfos";
 //$url = "http://gw.open.ppdai.com/balance/balanceService/QueryBalance";
 
 // $request = '{"OpenID": "be47e5e4b9444047b0f8fe9311a8ea29"}';
 // $request = '{"Mobile": "15026671512","DeviceFP": "123456"}';
 //$request = '{"Timestamp": "2017-03-14 19:15:22"}';
-// $request = '{"PageIndex": 1,"StartDateTime": "2015-11-11 12:00:00.000"}';
+//$request = '{"PageIndex": 1,"StartDateTime": "2018-03-11 12:00:00.000"}';
 // $request = '{"ListingIds": [100001,123456]}';
 //$request = '{}';
 
 //$result = send($url, $request,$accessToken);
 
-/*加解密*/
+/*�ӽ���*/
 // $data = "test";
 // $encrypted = encrypt($data);
 // $decrypted = decrypt($encrypted);
 // echo "Encrypted: ".$encrypted."<br>";
 // echo "Decrypted: ".$decrypted;
-include 'ppd_polcy.php';
 include 'openapi_client.php';
+include 'src/cache/FileCache.php';
+$cache = new Cache_Driver(array("./src/cache/runtime"));
+$accessToken = "76b51c39-b62c-4a9e-9cac-d417b8afc013";
 
 function pp_log($str,$bid){
     $now = date("Y-m-d H:i:s");
-    echo "($now):标号".$bid.$str."\n";
+    echo "($now):���".$bid.$str."\n";
 }
 
-
 getLoanList();
-/*新版投标列表接口（默认每页2000条）*/
+/*�°�Ͷ���б��ӿڣ�Ĭ��ÿҳ2000����*/
 function getLoanList(){
     global  $accessToken;
-    $url = "https://openapi.ppdai.com/invest/BidService/BidList";
-    $request = '{
-  "ListingId": 0,
-  "StartTime": "2018-01-01",
-  "EndTime": "2018-03-12",
-  "PageIndex": 1,
-  "PageSize": 20
-}';
-    $result = send($url, $request,$accessToken);
-    print_r($result);
-print_r(21312);exit;
+    global  $cache;
+    //��ʱ��������
+    $nowRecodeTime = time();
+    $lastRecodeTime = $cache->get("lastRecodeTime",$nowRecodeTime) ;
+    if($nowRecodeTime - $lastRecodeTime >300){
+        $cache->set("lastRecodeTime",$nowRecodeTime);
+        $cache->clean();
+    }
+
+    $url = "http://gw.open.ppdai.com/invest/LLoanInfoService/LoanList";
+    $date = date("Y-m-d H:i:s",time()-3600);
+    $request = '{"PageIndex": 1,"StartDateTime": "'.$date.'"}';
+    $result = json_decode(send($url, $request,$accessToken),true);
     if($result['Result'] !== 1){
-        log($result['ResultMessage']);
+        pp_log($result['ResultMessage']);
     }
     $aviLoan = array();
     foreach($result['LoanInfos'] as $key=>$value){
-        if($value['Rate']<10 || $value['Months']>12){
+        if($value['Rate']<10 || $value['Months']>12||$cache->get("ppid".$value['ListingId'])){
             continue;
         }
         $aviLoan[]=$value['ListingId'];
     }
-    print_r(getLoanInfo($aviLoan));exit;
-    return getLoanInfo($aviLoan);
+    $temp = array();
+    foreach($aviLoan as $k=>$v){
+        $temp[]=$v;
+        $cache->set("ppid".$v,1,900);
+        if(($k % 9)==0 && $k>0){
+            $bidList = getLoanInfo($temp);
+            if(1 == $bidList['Result'] ){
+                doBid($bidList['LoanInfos']);
+            }
+            $temp = array();
+        }
+
+    }
+
 }
 
-/*获取投标详情*/
+/*��ȡͶ������*/
 function getLoanInfo($aviLoan){
-    /*新版散标详情批量接口（请求列表不大于10）*/
-    $url = "https://openapi.ppdai.com/invest/LLoanInfoService/BatchListingInfos";
+    global  $accessToken;
+    /*�°�ɢ�����������ӿڣ������б�������10��*/
+    $url = "http://gw.open.ppdai.com/invest/LLoanInfoService/BatchListingInfos";
     $aviLoanStr = implode(",",$aviLoan);
     $request = '{"ListingIds": ['.$aviLoanStr.']}';
-    $result = send($url, $request);
+    $result = json_decode(send($url, $request,$accessToken),true);
     if($result['Result']!==1){
-        log($result['ResultMessage']);
+        pp_log($result['ResultMessage']);
     }
-    return $result['Result'];
+    return $result;
 }
 
-function doBid(){
-    $bidList = getLoanList();
-    /*投标接口*/
-    $url = "https://openapi.ppdai.com/invest/BidService/Bidding";
-    $accessToken="yourAccessToken";
-    foreach($bidList as $bk=>$bv){
-        $amount = getBidAmount($bv);
-        foreach($bv as $bkl=>$bvl){
-            $request = '{"ListingId": '.$bvl.',"Amount": '.$amount.',"UseCoupon":"true"}';
-            $result = send($url, $request,$accessToken);
-            if($result['Result']== -1){
-                log($result['ResultMessage'],$result['ListingId']);
-                continue;
+function doBid($bidList){
+    if($bidList){
+        /*Ͷ��ӿ�*/
+        $url = "http://gw.open.ppdai.com/invest/BidService/Bidding";
+        $accessToken="yourAccessToken";
+        foreach($bidList as $bk=>$bv){
+            $amount = getBidAmount($bv);
+            if($amount >0){
+//                $request = '{"ListingId": '.$bv.',"Amount": '.$amount.',"UseCoupon":"true"}';
+//                $result = send($url, $request,$accessToken);
+//                if($result['Result']== -1){
+//                    pp_log($result['ResultMessage'],$result['ListingId']);
+//                    continue;
+//                }
+                pp_log(" ".$bk."�����Ͷ�ʳɹ�",$result['ListingId']);
             }
-            log(" ".$bk."级标的投资成功",$result['ListingId']);
         }
     }
 }
 
 
-/**根据投资策略，计算该标的投资额度, otherpersonflag为真时考虑其他用户的投标*/
+/**����Ͷ�ʲ��ԣ�����ñ��Ͷ�ʶ��, otherpersonflagΪ��ʱ���������û���Ͷ��*/
 function getBidAmount($LoanInfo){
     global $config;
     $flag="";
@@ -116,9 +124,9 @@ function getBidAmount($LoanInfo){
 
     $repayCountRatio = getRepayCountRatio($LoanInfo);
     $owingRatio = getOwingRatio($LoanInfo);
-//    //以前分别是5.5 和 0.85
+//    //��ǰ�ֱ���5.5 �� 0.85
     if($LoanInfo['HighestDebt']>=11000 && ($owingRatio>0.95)){
-        log('比历史最高负债高，有点怕怕~',$LoanInfo['ListingId']);
+        pp_log('����ʷ��߸�ծ�ߣ��е�����~',$LoanInfo['ListingId']);
         return 0;
     }
 
@@ -127,51 +135,51 @@ function getBidAmount($LoanInfo){
         return 0;
     }
 
-    $creditPerNorm = $owing;	//设置一个比较大的数(缺省没有信用)
-    if($LoanInfo['NormalCount']>0) $creditPerNorm = $owing/$LoanInfo['NormalCount'];	//每次正常还款对应的id
+    $creditPerNorm = $owing;	//����һ���Ƚϴ����(ȱʡû������)
+    if($LoanInfo['NormalCount']>0) $creditPerNorm = $owing/$LoanInfo['NormalCount'];	//ÿ�����������Ӧ��id
 
-    //投资期限设置,下面这行总保留,防止错误
-    if($LoanInfo['Months']>12)  return 0;		//12个月也投
+    //Ͷ����������,���������ܱ���,��ֹ����
+    if($LoanInfo['Months']>12)  return 0;		//12����ҲͶ
 
-    //投资期限设置,如果只投6个月，允许这行
-//		if(loan.month>=12)  return 0;		//12个月不投，只投6个月
+    //Ͷ����������,���ֻͶ6���£���������
+//		if(loan.month>=12)  return 0;		//12���²�Ͷ��ֻͶ6����
 
-    //单笔金额不能太大
-    if($LoanInfo['amount']>$config['amountLimit'] || $LoanInfo['amount']>=10000)  return 0;
+    //���ʽ���̫��
+    if($LoanInfo['Amount']>$config['AmountLimit'] || $LoanInfo['Amount']>=10000)  return 0;
 
-    //待还金额不能太大
-    if($LoanInfo['OwingAmount']>$config['owingAmountLimit'] || $LoanInfo['OwingAmount']>=15000) return 0;
+    //��������̫��
+    if($LoanInfo['OwingAmount']>$config['OwingAmountLimit'] || $LoanInfo['OwingAmount']>=15000) return 0;
 
-    $bidAmount=0;	//预期投资的金额
+    $bidAmount=0;	//Ԥ��Ͷ�ʵĽ��
 
     if($owinglimit>0){
-        //成功还款次数/借款次数， 如果大于一定值，则表示前面的还款比较正常
-        //该参数非常重要，用于判断进行刷信用的情况
-        $r = $LoanInfo['NormalCount']/$LoanInfo['successCount'];
+        //�ɹ��������/�������� �������һ��ֵ�����ʾǰ��Ļ���Ƚ�����
+        //�ò����ǳ���Ҫ�������жϽ���ˢ���õ����
+        $r = $LoanInfo['NormalCount']/$LoanInfo['SuccessCount'];
         $bidAmount=1;
         if($owing<=$owinglimit){
-            $ro = $owing/$owinglimit;	//欠款和额度的比例
-            $rhd = 10;	//欠款和历史最高负载的比例
+            $ro = $owing/$owinglimit;	//Ƿ��Ͷ�ȵı���
+            $rhd = 10;	//Ƿ�����ʷ��߸��صı���
             if($LoanInfo['HighestDebt']>0) $rhd = $owing/$LoanInfo['HighestDebt'];
             $trueloanflag = false;
             if($LoanInfo['TotalPrincipal']>0 && $LoanInfo['TotalPrincipal']<5000){
-                $trueloanflag = false;	//累计借款数额太小不成
+                $trueloanflag = false;	//�ۼƽ������̫С����
             }
             else if($rhd>=1.1){
-                $trueloanflag = false;	//要求所有欠款低于最高负债一定比例
+                $trueloanflag = false;	//Ҫ������Ƿ�������߸�ծһ������
             }else if($LoanInfo['Amount']>=$LoanInfo['HighestPrincipal'] && $rhd>=0.8){
-                //不超过最高借款,同时满足最高负债的比例
+                //��������߽��,ͬʱ������߸�ծ�ı���
                 $trueloanflag = false;
             }
-            else{	//最后是允许的正面条件，前面都是筛选条件
-                //if(r>=4 || (rhd>0 && rhd<0.7))	//不严格的情况
-                if($r>=4 && ($rhd>0 && $rhd<0.7))	//严格的情况
-                {		//原来严格的时候设置rhd<0.6
-                    $trueloanflag = true;	//正常还款的次数比或者
+            else{	//���������������������ǰ�涼��ɸѡ����
+                //if(r>=4 || (rhd>0 && rhd<0.7))	//���ϸ�����
+                if($r>=4 && ($rhd>0 && $rhd<0.7))	//�ϸ�����
+                {		//ԭ���ϸ��ʱ������rhd<0.6
+                    $trueloanflag = true;	//��������Ĵ����Ȼ���
                 }
             }
 
-            //待还金额不能大于10000元
+            //�������ܴ���10000Ԫ
             if($trueloanflag){
                 $bidAmount = getBidCreit($LoanInfo);
 
@@ -179,211 +187,211 @@ function getBidAmount($LoanInfo){
         }
     }
     else if($creditPerNorm<=85 && $owing<=6000 && $LoanInfo['NormalCount']>=40){
-        //所有欠款小于1万，且信用额度较高的情况
+        //����Ƿ��С��1�������ö�Ƚϸߵ����
 //			bidAmount=BidPolicy.creditBidCount;
     }
     else if($owing<=5000 && $LoanInfo['Months']<=6 && $LoanInfo['SuccessCount'] ==0 && $LoanInfo['CancelCount']==0 && $LoanInfo['FailedCount']==0){
-        //第一次借款的情况
-        if($LoanInfo['gender']==2 ||
-            ($LoanInfo['educationDegree']!=null && $LoanInfo['educationDegree']=="本科"
-                && $LoanInfo['studyStyle']!=null && $LoanInfo['studyStyle']=="普通"	)){
-            $bidAmount=1;	//如果金额太小，用于显示数据，并不实际投资，测试用
+        //��һ�ν������
+        if($LoanInfo['Gender']==2 ||
+            ($LoanInfo['EducationDegree']!=null && $LoanInfo['EducationDegree']=="����"
+                && $LoanInfo['StudyStyle']!=null && $LoanInfo['StudyStyle']=="��ͨ"	)){
+            $bidAmount=1;	//������̫С��������ʾ���ݣ�����ʵ��Ͷ�ʣ�������
         }
     }
     else if($creditPerNorm<100 && $owing<20000 && $LoanInfo['NormalCount']>=30){
-        //所有欠款小于1万，且信用额度较高的情况
-        $bidAmount=1;	//如果金额太小，用于显示数据，并不实际投资，测试用
+        //����Ƿ��С��1�������ö�Ƚϸߵ����
+        $bidAmount=1;	//������̫С��������ʾ���ݣ�����ʵ��Ͷ�ʣ�������
     }
     return $bidAmount;
 }
 
-/**flag为true表示是否计算其他人投标的影响*/
+/**flagΪtrue��ʾ�Ƿ����������Ͷ���Ӱ��*/
 function  getCreditLimit($loaninfo){
     global $config;
-    //至少要认证身份证和电话
-    if($loaninfo['PhoneValidate']==0){	//99%以上的都有手机验证
-        log('无手机号',$loaninfo['ListingId']);
+    //����Ҫ��֤����֤�͵绰
+    if($loaninfo['PhoneValidate']==0){	//99%���ϵĶ����ֻ���֤
+        pp_log('���ֻ���',$loaninfo['ListingId']);
         return 0;
     }
 
     $time_off = time()-strtotime($loaninfo['LastSuccessBorrowTime']);
     if( $time_off<604800){
-        log("刚借完又借的资金状况忒差了~淘汰",$loaninfo['ListingId']);
+        pp_log("�ս����ֽ���ʽ�״��߯����~��̭",$loaninfo['ListingId']);
         return 0;
     }
-    //有超期还款记录的
+    //�г��ڻ����¼��
     if($loaninfo['OverdueMoreCount']>=0){
-        log('超期还款记录',$loaninfo['ListingId']);
+        pp_log('���ڻ����¼',$loaninfo['ListingId']);
         return 0;
     }
-    //超过3次的直接过掉，后面有更严格的要求
-    if($loaninfo['OverdueLessCount']>=3){	//99%以上的都有手机验证
-        log('逾期(1-15)还清次数',$loaninfo['ListingId']);
+    //����3�ε�ֱ�ӹ����������и��ϸ��Ҫ��
+    if($loaninfo['OverdueLessCount']>=3){	//99%���ϵĶ����ֻ���֤
+        pp_log('����(1-15)�������',$loaninfo['ListingId']);
         return 0;
     }
 
-    //学历的情况
+    //ѧ�������
     if($loaninfo['CertificateValidate']==0){
-        log('未完成学历认证',$loaninfo['ListingId']);
+        pp_log('δ���ѧ����֤',$loaninfo['ListingId']);
         return 0;
-    };	//学历认证的占比1/3
-    $owing = $loaninfo['amount'] + $loaninfo['OwingAmount'];	//如果借款成功后的待还
-    $strictflag=false;	//对与很好的标
+    };	//ѧ����֤��ռ��1/3
+    $owing = $loaninfo['Amount'] + $loaninfo['OwingAmount'];	//������ɹ���Ĵ���
+    $strictflag=false;	//����ܺõı�
     if($loaninfo['Months']==6 && ($loaninfo['CreditCode'] == 'D'||$loaninfo['CreditCode'] == 'C')){
         if($loaninfo['NormalCount']>45 && $owing<5500) $strictflag=true;
         else if($loaninfo['NormalCount']>=70 && $owing<6500) $strictflag=true;
         else if($loaninfo['NormalCount']>=100 && $owing<7500) $strictflag=true;
     }
-    //不允许逾期(在openAPI自动投资中好像特别关注)
+    //����������(��openAPI�Զ�Ͷ���к����ر��ע)
     if($loaninfo['OverdueLessCount']>=1){
         $overdueflag = true;
-        //不严格的情况下,35倍，基数45，
-        //严格的情况下，45倍，基数60
-        if($loaninfo['NormalCount']>$config['overduelessNormalCountBase']
-            && ($loaninfo['NormalCount']> ($loaninfo['OverdueLessCount']*$config['overduelessNormalCountPerOne']))){
+        //���ϸ�������,35��������45��
+        //�ϸ������£�45��������60
+        if($loaninfo['NormalCount']>$config['OverduelessNormalCountBase']
+            && ($loaninfo['NormalCount']> ($loaninfo['OverdueLessCount']*$config['OverduelessNormalCountPerOne']))){
             $overdueflag = false;
         }
         if($overdueflag){
-            //对于逾期一次的
-            log('逾期淘汰',$loaninfo['ListingId']);
+            //��������һ�ε�
+            pp_log('������̭',$loaninfo['ListingId']);
             return 0;
         }
     }
 
-    if($loaninfo['noWasteCountFlag']){
-        //不允许有流标和撤标的情况
+    if($config['NoWasteCountFlag']){
+        //������������ͳ�������
         if($loaninfo['FailedCount']>0 || (!$strictflag && $loaninfo['FailedCount']==1)){
-            log('不容许有流标和撤标的情况',$loaninfo['ListingId']);
-            return 0;//失败
+            pp_log('������������ͳ�������',$loaninfo['ListingId']);
+            return 0;//ʧ��
         }
         if($loaninfo['CancelCount']>0 || (!$strictflag && $loaninfo['CancelCount']==1)){
-            log('不容许有流标和撤标的情况',$loaninfo['ListingId']);
-            return 0;	//撤销
+            pp_log('������������ͳ�������',$loaninfo['ListingId']);
+            return 0;	//����
         }
         if($loaninfo['WasteCount']>0 || (!$strictflag && $loaninfo['WasteCount']==1)){
-            log('不容许有流标和撤标的情况',$loaninfo['ListingId']);
-            return 0;		//流标
+            pp_log('������������ͳ�������',$loaninfo['ListingId']);
+            return 0;		//����
         }
     }
 
-    //系统禁止18岁以下的人借款，同时34岁及以下占比80%以上，40岁及以下92%，38岁及以下占比90%
-    //48岁及以下占比98%
-    //系统中年龄分布和性别的分布好像关系不大
-    //***根据自己的黑名单统计30岁以上借款小额的问题比较大(原来是不能大于32岁）
-    if($loaninfo['age']<20 || $loaninfo['age']>=38){
-        log('年龄不符合要求',$loaninfo['ListingId']);
+    //ϵͳ��ֹ18�����µ��˽�ͬʱ34�꼰����ռ��80%���ϣ�40�꼰����92%��38�꼰����ռ��90%
+    //48�꼰����ռ��98%
+    //ϵͳ������ֲ����Ա�ķֲ������ϵ����
+    //***�����Լ��ĺ�����ͳ��30�����Ͻ��С�������Ƚϴ�(ԭ���ǲ��ܴ���32�꣩
+    if($loaninfo['Age']<20 || $loaninfo['Age']>=38){
+        pp_log('���䲻����Ҫ��',$loaninfo['ListingId']);
         return 0;
     }
 
-    if($loaninfo['age']>=30 && $owing<=5000){
-        log('30岁以上小额贷款问题比较大',$loaninfo['ListingId']);
+    if($loaninfo['Age']>=30 && $owing<=5000){
+        pp_log('30������С���������Ƚϴ�',$loaninfo['ListingId']);
         return 0;
     }
-    //以前设置成25，待还6000
+    //��ǰ���ó�25������6000
     if($loaninfo['NormalCount']>25 && $owing<=5000 && $loaninfo['Months']==6 && ($loaninfo['CreditCode'] == 'D'||$loaninfo['CreditCode'] == 'C')){
-        //还款记录较少的小额贷款
-        $loaninfo['flag']="Little";
+        //�����¼���ٵ�С�����
+        $loaninfo['Flag']="Little";
     }
     else if($loaninfo['NormalCount<35']){
-        log('还款记录较少',$loaninfo['ListingId']);
-        return 0;	//20的情况下出现的标很多
+        pp_log('�����¼����',$loaninfo['ListingId']);
+        return 0;	//20������³��ֵı�ܶ�
     }
 
-    //成功还款次数/借款次数， 如果大于一定值，则表示前面的还款比较正常
-    //该参数非常重要，用于判断通过全额的提前还款进行刷信用的情况
-    //如果进行全额本息的提前还款并不会导致异常
-    $r = ($loaninfo['NormalCount'])/$loaninfo['successCount'];
+    //�ɹ��������/�������� �������һ��ֵ�����ʾǰ��Ļ���Ƚ�����
+    //�ò����ǳ���Ҫ�������ж�ͨ��ȫ�����ǰ�������ˢ���õ����
+    //�������ȫ�Ϣ����ǰ������ᵼ���쳣
+    $r = ($loaninfo['NormalCount'])/$loaninfo['SuccessCount'];
     if($r<3){
-        log('小贼，涉嫌刷信誉',$loaninfo['ListingId']);
+        pp_log('С��������ˢ����',$loaninfo['ListingId']);
         return 0;
     }
 
-    //计算可能的
+    //������ܵ�
     $owinglimit = 0;
-    if ($loaninfo['CertificateValidate'] == 1 && $loaninfo['studyStyle'] != null) {
-        if ($loaninfo['gender'] == 2) $owinglimit += 1000; // 女
-        // CertificateValidate学位认证, （EducateValidate学籍认证）
-        if ($loaninfo['StudyStyle']=="普通" ||$loaninfo['StudyStyle']=="普通全日制") {
-            if (strpos($loaninfo['EducationDegree'],"本科")!=false) {
+    if ($loaninfo['CertificateValidate'] == 1 && $loaninfo['StudyStyle'] != null) {
+        if ($loaninfo['Gender'] == 2) $owinglimit += 1000; // Ů
+        // CertificateValidateѧλ��֤, ��EducateValidateѧ����֤��
+        if ($loaninfo['StudyStyle']=="��ͨ" ||$loaninfo['StudyStyle']=="��ͨȫ����") {
+            if (strpos($loaninfo['EducationDegree'],"����")!=false) {
                 $owinglimit += 3000;
             } else {
                 $owinglimit += 2000;
             }
-        } else if ("研究生"==$loaninfo['StudyStyle']) {
+        } else if ("�о���"==$loaninfo['StudyStyle']) {
             $owinglimit += 5000;
         } else{
             $owinglimit += 1000;
         }
 
         if ($loaninfo['VideoValidate'] == 1 || $loaninfo['NciicIdentityCheck'] == 1) {
-            // 视频认证或者户籍认证
+            // ��Ƶ��֤���߻�����֤
             $owinglimit += 1000;
         }
         if ($loaninfo['CreditValidate'] == 1) {
-            $owinglimit += 2000; // 人行信用认证
+            $owinglimit += 2000; // ����������֤
         }
 
-        //依据已经还款的次数进行信用评价
+        //�����Ѿ�����Ĵ���������������
         if ($loaninfo['NormalCount'] >= 25) {
             $rebitlimit = 200 * ($loaninfo['NormalCount'] - 20);
             $owinglimit += $rebitlimit;
         }
-        //依据累计还款的额度信用评价
+        //�����ۼƻ���Ķ����������
         if ($loaninfo['TotalPrincipal'] >= 0) {
             $rebitlimit = ($loaninfo['TotalPrincipal'] - $loaninfo['OwingPrincipal'])/5;
             if($rebitlimit>0) $owinglimit += $rebitlimit;
         }
-        // 不能太高, 目前6个月的额度比12个月的额度高
-        if ($owinglimit > $config['maxOwingLimit6'])
-            $owinglimit = $config['maxOwingLimit6'];
+        // ����̫��, Ŀǰ6���µĶ�ȱ�12���µĶ�ȸ�
+        if ($owinglimit > $config['MaxOwingLimit6'])
+            $owinglimit = $config['MaxOwingLimit6'];
         if ($loaninfo['Months'] >= 12) {
-            if ($owinglimit > $config['maxOwingLimit12'])
-                $owinglimit = $config['maxOwingLimit12'];
+            if ($owinglimit > $config['MaxOwingLimit12'])
+                $owinglimit = $config['MaxOwingLimit12'];
         }
     }
     return $owinglimit;
 }
 
-/**只投学历标，根据学历的不同金额也不同**/
+/**ֻͶѧ���꣬����ѧ���Ĳ�ͬ���Ҳ��ͬ**/
 function getBidCreit($LoanInfo){
     global $config;
-    $bidAmount=$config['creditBidAmount'];
-    if ($LoanInfo['CertificateValidate'] == 1 && $LoanInfo['studyStyle'] != null) {
-        if ($LoanInfo['gender'] == 2) $bidAmount += 10; // 女
-        // CertificateValidate学位认证, （EducateValidate学籍认证）
-        if ($LoanInfo['StudyStyle']=="普通" ||$LoanInfo['StudyStyle']=="普通全日制") {
-            if (strpos($LoanInfo['EducationDegree'],"本科")!=false) {
+    $bidAmount=$config['CreditBidAmount'];
+    if ($LoanInfo['CertificateValidate'] == 1 && $LoanInfo['StudyStyle'] != null) {
+        if ($LoanInfo['Gender'] == 2) $bidAmount += 10; // Ů
+        // CertificateValidateѧλ��֤, ��EducateValidateѧ����֤��
+        if ($LoanInfo['StudyStyle']=="��ͨ" ||$LoanInfo['StudyStyle']=="��ͨȫ����") {
+            if (strpos($LoanInfo['EducationDegree'],"����")!=false) {
                 $bidAmount += 30;
             } else {
                 $bidAmount += 20;
             }
-        } else if ("研究生"==$LoanInfo['StudyStyle']) {
+        } else if ("�о���"==$LoanInfo['StudyStyle']) {
             $bidAmount += 50;
         } else{
             $bidAmount += 10;
         }
 
         if ($LoanInfo['VideoValidate'] == 1 || $LoanInfo['NciicIdentityCheck'] == 1) {
-            // 视频认证或者户籍认证
+            // ��Ƶ��֤���߻�����֤
             $bidAmount += 10;
         }
         if ($LoanInfo['CreditValidate'] == 1) {
-            $bidAmount += 20; // 人行信用认证
+            $bidAmount += 20; // ����������֤
         }
     }
     return $bidAmount;
 }
 
-/**欠款与最高欠款比例*/
+/**Ƿ�������Ƿ�����*/
 function getOwingRatio($loaninfo){
     $owingRatio = 0;
     if($loaninfo['HighestDebt']>0) $owingRatio=  ($loaninfo['Amount']+ $loaninfo['OwingAmount'])/$loaninfo['HighestDebt'];
     return $owingRatio;
 }
 
-/**回款次数比例*/
+/**�ؿ��������*/
 function  getRepayCountRatio($loaninfo){
     $repayRatio = 0;
-    if($loaninfo['SuccessCount']>0) $repayRatio= $loaninfo['NormalCount']/$loaninfo['successCount'];
+    if($loaninfo['SuccessCount']>0) $repayRatio= $loaninfo['NormalCount']/$loaninfo['SuccessCount'];
     return $repayRatio;
 }

@@ -1,5 +1,5 @@
 <?php
-include 'core/global.php';
+include 'global.php';
 
 /**
  * 排序Request至待签名字符串

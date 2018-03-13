@@ -1,5 +1,5 @@
 <?php
-include 'core/rsa_client.php';
+include 'rsa_client.php';
 
 function SendAuthRequest($url, $request) {
 	$curl = curl_init ( $url );
@@ -53,7 +53,6 @@ function SendRequest ( $url, $request, $appId, $accessToken ){
         curl_setopt ( $curl, CURLOPT_RETURNTRANSFER, 1 );
         $result = curl_exec ( $curl );
         curl_close ( $curl );
-    var_dump($result);exit;
         return $result;
 }
 
