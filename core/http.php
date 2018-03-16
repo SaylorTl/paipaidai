@@ -4,7 +4,7 @@ include 'rsa_client.php';
 function SendAuthRequest($url, $request) {
 	$curl = curl_init ( $url );
 	$header = array ();
-	$header [] = 'Content-Type:application/json;charset=UTF-8';
+	$header [] = 'Content-Type:application/json;charset=GBK';
 	
 	curl_setopt ( $curl, CURLOPT_HTTPHEADER, $header );
 	curl_setopt ( $curl, CURLOPT_POST, 1 );
@@ -40,7 +40,7 @@ function SendRequest ( $url, $request, $appId, $accessToken ){
     $request_sign = sign($requestSignStr);
     
     $header = array ();
-    $header [] = 'Content-Type:application/json;charset=UTF-8';
+    $header [] = 'Content-Type:application/json;charset=GBK';
     $header [] = 'X-PPD-TIMESTAMP:' . $timestamp;
     $header [] = 'X-PPD-TIMESTAMP-SIGN:' . $timestap_sign;
     $header [] = 'X-PPD-APPID:' . $appId;

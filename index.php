@@ -49,20 +49,17 @@ $PageIndex = 1;
 $isContinue = true;
 
 do{
-    print_r(1);
     var_dump($finish);
     if($finish){
-        print_r(2);
         $finish = false;
         $msg=date("Y-m-d H:i:s");
         getLoanList();
-        $PageIndex ++;
         echo "查询第".$PageIndex."页\n";
+        $PageIndex ++;
 
     }
     sleep($interval);//等待时间，进行下一次操作。
 }while(true);
-//run();
 //function run(){
 //    $time=15;
 //    $url="http://127.0.0.1/paipaidai/";
@@ -102,7 +99,6 @@ function getLoanList(){
     if(count($result['LoanInfos'])<200){
         $PageIndex = 1;
         $isContinue = false;
-//        run();
     }
     if(empty($result['LoanInfos'])){
         pp_log('查询结果为空','123');
@@ -159,13 +155,14 @@ function doBid($bidList){
         foreach($bidList as $bk=>$bv){
             $amount = getBidAmount($bv);
             if($amount >0){
-                $request = '{"ListingId": '.$bv.',"Amount": '.$amount.',"UseCoupon":"true"}';
-                $result = send($url, $request,$accessToken);
-                if($result['Result']== -1){
-                    pp_log($result['ResultMessage'],$result['ListingId']);
+                pp_log(" ".$bv['CreditCode']."开始投标",$bv['ListingId']);
+                $request = '{"ListingId": '.$bv['ListingId'].',"Amount": '.$amount.',"UseCoupon":"true"}';
+                $result = json_decode(send($url, $request,$accessToken),true);
+                if($result['Result']!= 0){
+                    pp_log($result['Result'].$result['ResultMessage'],$result['ListingId']);
                     continue;
                 }
-                pp_log(" ".$bk."级标的投资成功",$bv['ListingId']);
+                pp_log(" ".$bv['CreditCode']."级标的投资成功",$bv['ListingId']);
             }
         }
     }
@@ -320,15 +317,15 @@ function  getCreditLimit($loaninfo){
     if($config['NoWasteCountFlag']){
         //不允许有流标和撤标的情况
         if($loaninfo['FailedCount']>0 || (!$strictflag && $loaninfo['FailedCount']==1)){
-            pp_log('不容许有流标和撤标的情况',$loaninfo['ListingId']);
+            pp_log('不容许有流标和撤标的情况',$loaninfo['ListingId'],$loaninfo['CreditCode']);
             return 0;//失败
         }
         if($loaninfo['CancelCount']>0 || (!$strictflag && $loaninfo['CancelCount']==1)){
-            pp_log('不容许有流标和撤标的情况',$loaninfo['ListingId']);
+            pp_log('不容许有流标和撤标的情况',$loaninfo['ListingId'],$loaninfo['CreditCode']);
             return 0;	//撤销
         }
         if($loaninfo['WasteCount']>0 || (!$strictflag && $loaninfo['WasteCount']==1)){
-            pp_log('不容许有流标和撤标的情况',$loaninfo['ListingId']);
+            pp_log('不容许有流标和撤标的情况',$loaninfo['ListingId'],$loaninfo['CreditCode']);
             return 0;		//流标
         }
     }
@@ -338,19 +335,19 @@ function  getCreditLimit($loaninfo){
     //系统中年龄分布和性别的分布好像关系不大
     //***根据自己的黑名单统计30岁以上借款小额的问题比较大(原来是不能大于32岁）
     if($loaninfo['Age']<20 || $loaninfo['Age']>=38){
-        pp_log('年龄不符合要求',$loaninfo['ListingId']);
+        pp_log('年龄不符合要求',$loaninfo['ListingId'],$loaninfo['CreditCode']);
         return 0;
     }
 
     if($loaninfo['Age']>=30 && $owing<=5000){
-        pp_log('30岁以上小额贷款问题比较大',$loaninfo['ListingId']);
+        pp_log('30岁以上小额贷款问题比较大',$loaninfo['ListingId'],$loaninfo['CreditCode']);
         return 0;
     }
     //以前设置成25，待还6000
     if($loaninfo['NormalCount']<35 && $owing<=6000 && $loaninfo['Months']==6 && ($loaninfo['CreditCode'] == 'C')){
         //还款记录较少的小额贷款
         $loaninfo['Flag']="Little";
-        pp_log('还款记录较少',$loaninfo['ListingId']);
+        pp_log('还款记录较少',$loaninfo['ListingId'],$loaninfo['CreditCode']);
         return 0;	//20的情况下出现的标很多
     }
 
