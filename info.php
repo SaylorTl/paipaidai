@@ -34,6 +34,8 @@ $accessToken ="c221676a-5eb6-4a3c-bc2c-89a4999c8ae8";//我的
 function pp_log($str,$bid=null,$creditcode=null){
 $now = date("Y-m-d H:i:s");
 echo "($now):".$creditcode."标号".$bid.$str."\n";
+$day = date("Y-m-d");
+file_put_contents("/var/www/html/paipaidai/paipaidai/src/cache/runtime/".$day.".log","($now):".$creditcode."标号".$bid.$str."\n", FILE_APPEND);
 }
 set_time_limit(0);// 通过set_time_limit(0)可以让程序无限制的执行下去
 ini_set('memory_limit','512M'); // 设置内存限制
@@ -41,17 +43,17 @@ $finish = true;
 $interval=15;//每隔一定时间运行
 $PageIndex = 1;
 $isContinue = true;
-do{
-var_dump($finish);
-if($finish){
-$finish = false;
-$msg=date("Y-m-d H:i:s");
-getLoanList();
-echo "查询第".$PageIndex."页\n";
-$PageIndex ++;
-}
-sleep($interval);//等待时间，进行下一次操作。
-}while(true);
+//do{
+//var_dump($finish);
+//if($finish){
+//$finish = false;
+//$msg=date("Y-m-d H:i:s");
+//getLoanList();
+//echo "查询第".$PageIndex."页\n";
+//$PageIndex ++;
+//}
+//sleep($interval);//等待时间，进行下一次操作。
+//}while(true);
 //function run(){
 // $time=15;
 // $url="http://127.0.0.1/paipaidai/";
@@ -60,6 +62,7 @@ sleep($interval);//等待时间，进行下一次操作。
 // echo "完结一次，执行下一次查询\n";
 // file_get_contents($url);
 //}
+getLoanList();
 /*新版投标列表接口（默认每页2000条）*/
 function getLoanList(){
 global $accessToken;
